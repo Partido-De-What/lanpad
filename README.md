@@ -1,8 +1,19 @@
 # LanPad
 
-Use your Android phone as a wireless touchpad for a Linux computer on the same
-private network. LanPad discovers your computer automatically and pairs with a
-five-digit PIN.
+**Your phone. Your touchpad.**
+
+[![Android 6.0+](https://img.shields.io/badge/Android-6.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](android/README.md)
+[![Linux X11](https://img.shields.io/badge/Linux-X11-FCC624?style=flat-square&logo=linux&logoColor=black)](receiver/README.md)
+[![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](android/README.md)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white)](receiver/README.md)
+[![mDNS discovery](https://img.shields.io/badge/Discovery-mDNS-0D766E?style=flat-square)](#how-it-works)
+[![Early development](https://img.shields.io/badge/Status-early_development-E9B44C?style=flat-square)](#next-steps)
+
+Control your Linux desktop with the phone already in your pocket. Swipe, click,
+scroll, and drag from a minimal Android touchpad. LanPad finds your computer on
+the local network and pairs with a five-digit PIN.
+
+[Get started](#getting-started) · [How it works](#how-it-works) · [Development](#development)
 
 **Status: early development.** The Android app and Linux/X11 receiver are
 implemented. Full build verification, live discovery, and physical-device testing
