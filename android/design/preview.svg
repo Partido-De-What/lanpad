@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1315" height="1000" viewBox="0 0 1315 1000">
 <title>LanPad interface design reference</title>
-<desc>Light and dark touchpad screens and the connection sheet. This is a vector design reference, not a captured Android screen.</desc>
+<desc>Light and dark touchpad screens and automatic receiver discovery with a five-digit pairing PIN. This is a vector design reference, not a captured Android screen.</desc>
 <rect width="1315" height="1000" fill="#E9EEE8"/>
 <g font-family="sans-serif"><text x="36" y="36" font-size="13" letter-spacing="2" fill="#586761">LANPAD · INTERFACE REFERENCE</text>
-<text x="36" y="70" font-size="26" fill="#202A28">Quiet surfaces. One accent. Space to move.</text>
+<text x="36" y="70" font-size="26" fill="#202A28">Your computer. Five digits. Ready to move.</text>
 <g transform="translate(36,100)">
 <rect x="0" y="0" width="393" height="852" rx="30" fill="#F6F7F3" stroke="#D7DED6" stroke-width="1"/>
 <text x="24" y="24" font-size="12" fill="#202A28" font-weight="600" text-anchor="start">9:41</text>
@@ -22,7 +22,7 @@
 <circle cx="346" cy="69" r="3" fill="#F6F7F3" stroke="#586761" stroke-width="1.5"/>
 <rect x="24" y="100" width="345" height="88" rx="20" fill="#F0F3EE"/>
 <text x="42" y="133" font-size="16" fill="#202A28" font-weight="500" text-anchor="start">Connect your computer</text>
-<text x="42" y="157" font-size="14" fill="#586761" font-weight="400" text-anchor="start">Same network. A little space to move.</text>
+<text x="42" y="157" font-size="14" fill="#586761" font-weight="400" text-anchor="start">LanPad workstation · ready to pair</text>
 <path d="M333,143L351,143" stroke="#0D766E" stroke-width="1.5" stroke-linecap="round" fill="none"/>
 <path d="M345,137L351,143" stroke="#0D766E" stroke-width="1.5" stroke-linecap="round" fill="none"/>
 <path d="M345,149L351,143" stroke="#0D766E" stroke-width="1.5" stroke-linecap="round" fill="none"/>
@@ -616,7 +616,7 @@
 <circle cx="346" cy="69" r="3" fill="#F6F7F3" stroke="#586761" stroke-width="1.5"/>
 <rect x="24" y="100" width="345" height="88" rx="20" fill="#F0F3EE"/>
 <text x="42" y="133" font-size="16" fill="#202A28" font-weight="500" text-anchor="start">Connect your computer</text>
-<text x="42" y="157" font-size="14" fill="#586761" font-weight="400" text-anchor="start">Same network. A little space to move.</text>
+<text x="42" y="157" font-size="14" fill="#586761" font-weight="400" text-anchor="start">LanPad workstation · ready to pair</text>
 <path d="M333,143L351,143" stroke="#0D766E" stroke-width="1.5" stroke-linecap="round" fill="none"/>
 <path d="M345,137L351,143" stroke="#0D766E" stroke-width="1.5" stroke-linecap="round" fill="none"/>
 <path d="M345,149L351,143" stroke="#0D766E" stroke-width="1.5" stroke-linecap="round" fill="none"/>
@@ -892,34 +892,32 @@
 <rect x="111" y="744" width="6" height="26" rx="3" fill="#0D766E"/>
 <text x="24" y="796" font-size="14" fill="#586761" font-weight="400" text-anchor="start">Hold Left + move to drag</text>
 <rect x="156" y="834" width="81" height="4" rx="2" fill="#586761"/>
-<rect x="0" y="0" width="393" height="852" rx="30" fill="#202A28"/>
+<rect x="0" y="0" width="393" height="852" rx="30" fill="#202A28" opacity="0.4"/>
 <rect x="0" y="220" width="393" height="632" rx="28" fill="#FEFFFC"/>
 <rect x="177" y="237" width="40" height="4" rx="2" fill="#728078"/>
 <text x="24" y="292" font-size="30" fill="#202A28" font-weight="500" text-anchor="start">A connection away.</text>
-<text x="24" y="323" font-size="16" fill="#586761" font-weight="400" text-anchor="start">Keep both devices on the same</text>
-<text x="24" y="347" font-size="16" fill="#586761" font-weight="400" text-anchor="start">private network.</text>
-<rect x="24" y="378" width="229" height="64" rx="16" fill="none" stroke="#728078" stroke-width="1"/>
-<rect x="36" y="368" width="85" height="18" rx="0" fill="#FEFFFC"/>
-<text x="40" y="383" font-size="12" fill="#586761" font-weight="400" text-anchor="start">Computer IP</text>
-<text x="40" y="417" font-size="16" fill="#202A28" font-weight="400" text-anchor="start">192.168.1.20</text>
-<rect x="265" y="378" width="104" height="64" rx="16" fill="none" stroke="#728078" stroke-width="1"/>
-<rect x="277" y="368" width="36" height="18" rx="0" fill="#FEFFFC"/>
-<text x="281" y="383" font-size="12" fill="#586761" font-weight="400" text-anchor="start">Port</text>
-<text x="281" y="417" font-size="16" fill="#202A28" font-weight="400" text-anchor="start">8765</text>
-<rect x="24" y="468" width="345" height="64" rx="16" fill="none" stroke="#728078" stroke-width="1"/>
-<rect x="36" y="458" width="78" height="18" rx="0" fill="#FEFFFC"/>
-<text x="40" y="473" font-size="12" fill="#586761" font-weight="400" text-anchor="start">Pairing PIN</text>
-<text x="40" y="507" font-size="16" fill="#202A28" font-weight="400" text-anchor="start">•••••</text>
-<text x="352" y="507" font-size="14" fill="#0D766E" font-weight="500" text-anchor="end">Show</text>
-<text x="40" y="555" font-size="13" fill="#586761" font-weight="400" text-anchor="start">Enter the five-digit PIN printed by your</text>
-<text x="40" y="575" font-size="13" fill="#586761" font-weight="400" text-anchor="start">computer's receiver.</text>
-<rect x="24" y="608" width="345" height="56" rx="18" fill="#0D766E"/>
-<text x="190" y="642" font-size="14" fill="#FFFFFF" font-weight="500" text-anchor="middle">Connect</text>
-<path d="M236,636L251,636" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-<path d="M245,630L251,636" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-<path d="M245,642L251,636" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-<text x="24" y="704" font-size="13" fill="#586761" font-weight="400" text-anchor="start">Your pairing PIN isn't saved on this phone.</text>
+<text x="24" y="323" font-size="16" fill="#586761" font-weight="400" text-anchor="start">Choose your computer and enter</text>
+<text x="24" y="347" font-size="16" fill="#586761" font-weight="400" text-anchor="start">its five-digit PIN.</text>
+<text x="24" y="387" font-size="16" fill="#202A28" font-weight="500" text-anchor="start">Your computer</text>
+<rect x="24" y="404" width="345" height="52" rx="18" fill="#D9EEE8"/>
+<text x="42" y="436" font-size="14" fill="#135A51" font-weight="500" text-anchor="start">LanPad workstation</text>
+<text x="351" y="436" font-size="12" fill="#135A51" font-weight="500" text-anchor="end">Selected</text>
+<text x="36" y="488" font-size="14" fill="#0D766E" font-weight="500" text-anchor="start">Search again</text>
+<text x="36" y="530" font-size="14" fill="#0D766E" font-weight="500" text-anchor="start">Enter address manually</text>
+<rect x="24" y="556" width="345" height="64" rx="16" fill="none" stroke="#728078" stroke-width="1"/>
+<rect x="36" y="546" width="82" height="18" rx="0" fill="#FEFFFC"/>
+<text x="40" y="561" font-size="12" fill="#586761" font-weight="400" text-anchor="start">Pairing PIN</text>
+<text x="40" y="594" font-size="20" fill="#202A28" font-weight="400" letter-spacing="6" text-anchor="start">•••••</text>
+<text x="352" y="594" font-size="14" fill="#0D766E" font-weight="500" text-anchor="end">Show</text>
+<text x="40" y="644" font-size="13" fill="#586761" font-weight="400" text-anchor="start">Five digits shown in your computer's</text>
+<text x="40" y="664" font-size="13" fill="#586761" font-weight="400" text-anchor="start">receiver terminal.</text>
+<rect x="24" y="692" width="345" height="56" rx="18" fill="#0D766E"/>
+<text x="190" y="726" font-size="14" fill="#FFFFFF" font-weight="500" text-anchor="middle">Connect</text>
+<path d="M236,720L251,720" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+<path d="M245,714L251,720" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+<path d="M245,726L251,720" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+<text x="24" y="788" font-size="13" fill="#586761" font-weight="400" text-anchor="start">Your pairing PIN isn't saved on this phone.</text>
 <rect x="156" y="834" width="81" height="4" rx="2" fill="#728078"/>
 </g>
-<text x="1078.5" y="980" font-size="12" fill="#586761" font-weight="500" text-anchor="middle">MANUAL CONNECTION FALLBACK</text>
+<text x="1078.5" y="980" font-size="12" fill="#586761" font-weight="500" text-anchor="middle">AUTOMATIC DISCOVERY + PIN PAIRING</text>
 </g></svg>

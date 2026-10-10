@@ -6,6 +6,7 @@ import logging
 import re
 import socket
 import subprocess
+import sys
 from contextlib import asynccontextmanager
 
 from .protocol import VERSION
@@ -37,15 +38,63 @@ def _ip(*arguments: str) -> list[dict]:
         ) from error
 
 
+def _windows_network() -> tuple[list[dict], list[dict]]:
+    """Read adapter aliases and IPv4 routes using Windows' built-in PowerShell."""
+    # The command is fixed: interface names are filtered in Python, never executed.
+    # UTF-8 preserves friendly adapter names regardless of the console code page.
+    script = r"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$addresses = @(Get-NetIPConfiguration -All | ForEach-Object {
+    if ($_.NetAdapter.Status -eq 'Up') {
+        @{
+            ifname = $_.InterfaceAlias
+            flags = @('UP')
+            operstate = 'UP'
+            virtual = [bool]$_.NetAdapter.Virtual
+            addr_info = @($_.IPv4Address | ForEach-Object { @{ local = $_.IPAddress } })
+        }
+    }
+})
+$routes = @(Get-NetRoute -AddressFamily IPv4 |
+    Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' } |
+    ForEach-Object {
+        @{ dev = $_.InterfaceAlias; metric = ([int]$_.RouteMetric + [int]$_.InterfaceMetric) }
+    })
+@{ addresses = $addresses; routes = $routes } | ConvertTo-Json -Depth 5 -Compress
+"""
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, encoding="utf-8", check=True, timeout=10,
+        )
+        network = json.loads(result.stdout.lstrip("\ufeff"))
+        addresses, routes = network["addresses"], network["routes"]
+        if not isinstance(addresses, list) or not isinstance(routes, list):
+            raise ValueError("Expected arrays of adapters and routes")
+        return addresses, routes
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as error:
+        raise RuntimeError(
+            "Cannot inspect Windows network interfaces. Check PowerShell or use --host.",
+        ) from error
+
+
 def choose_host(interface: str | None = None) -> str:
     """Prefer the active default-route LAN interface; allow an explicit interface override."""
-    addresses = _ip("address", "show", "scope", "global")
+    if sys.platform == "win32":
+        addresses, routes = _windows_network()
+    else:
+        addresses = _ip("address", "show", "scope", "global")
+        routes = _ip("route", "show", "default") if interface is None else []
     candidates = {}
     for item in addresses:
         name = item["ifname"]
         if interface is not None and name != interface:
             continue
-        if interface is None and name.startswith(VIRTUAL_PREFIXES):
+        virtual = item.get("virtual", False) or (
+            sys.platform != "win32" and name.startswith(VIRTUAL_PREFIXES)
+        )
+        if interface is None and virtual:
             continue
         if "UP" not in item.get("flags", []) or item.get("operstate") == "DOWN":
             continue
@@ -54,8 +103,7 @@ def choose_host(interface: str | None = None) -> str:
             if is_lan_address(host):
                 candidates.setdefault(name, host)
     if interface is None:
-        routes = sorted(_ip("route", "show", "default"), key=lambda route: route.get("metric", 0))
-        for route in routes:
+        for route in sorted(routes, key=lambda route: route.get("metric", 0)):
             if route.get("dev") in candidates:
                 return candidates[route["dev"]]
     if candidates:

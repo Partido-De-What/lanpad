@@ -9,7 +9,7 @@ import sys
 
 from .adapters import LoggingAdapter, X11Adapter
 from .discovery import choose_host, is_lan_address
-from .mouse import MouseSession
+from .mouse import InputAdapter, MouseSession
 from .protocol import parse_command
 from .receiver import Receiver
 from .server import run
@@ -40,7 +40,8 @@ def port_number(value: str) -> int:
 def local(adapter) -> None:
     """Apply JSON commands from terminal input directly, without a network connection."""
     session = MouseSession(adapter)
-    print("Local mouse test. Enter one protocol JSON command per line; Ctrl+D to stop.")
+    eof = "Ctrl+Z then Enter" if sys.platform == "win32" else "Ctrl+D"
+    print(f"Local mouse test. Enter one protocol JSON command per line; {eof} to stop.")
     try:
         for line in sys.stdin:
             if not line.strip():
@@ -54,15 +55,28 @@ def local(adapter) -> None:
             adapter.close()
 
 
+def input_adapter(dry_run: bool) -> InputAdapter:
+    """Choose the native desktop backend without importing Windows APIs on Linux."""
+    if dry_run:
+        return LoggingAdapter()
+    if sys.platform == "win32":
+        from .windows import WindowsAdapter
+
+        return WindowsAdapter()
+    return X11Adapter()
+
+
 def main() -> None:
     """Parse options, choose the input backend, and start local mode or the server."""
-    parser = argparse.ArgumentParser(description="LanPad Linux/X11 mouse receiver")
+    parser = argparse.ArgumentParser(description="LanPad Linux/X11 and Windows mouse receiver")
     parser.add_argument("command", choices=("serve", "local"), nargs="?", default="serve")
     network = parser.add_mutually_exclusive_group()
     network.add_argument(
         "--host", type=bind_address, help="Override automatic LAN address selection",
     )
-    network.add_argument("--interface", help="Use a specific LAN interface, for example wlan0")
+    network.add_argument(
+        "--interface", help="Use a LAN interface name, for example wlan0 or Wi-Fi",
+    )
     parser.add_argument("--no-discovery", action="store_true", help="Disable mDNS advertisement")
     parser.add_argument("--port", type=port_number, default=8765)
     parser.add_argument("--dry-run", action="store_true", help="Log input without moving the mouse")
@@ -70,10 +84,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
         if args.command == "serve":
-            # Check transport availability before opening an X11 connection.
+            # Check transport availability before opening the native input backend.
             import websockets.asyncio.server  # noqa: F401
             host = args.host or choose_host(args.interface)
-        adapter = LoggingAdapter() if args.dry_run else X11Adapter()
+        adapter = input_adapter(args.dry_run)
         if args.command == "local":
             local(adapter)
         else:

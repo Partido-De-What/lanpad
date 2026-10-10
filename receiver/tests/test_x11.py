@@ -8,6 +8,7 @@ from lanpad.adapters import X11Adapter
 
 @pytest.fixture
 def display(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
     calls = []
     fake = SimpleNamespace(
         has_extension=lambda name: name == "XTEST",

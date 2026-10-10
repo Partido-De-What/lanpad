@@ -1,5 +1,7 @@
 import argparse
 import io
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -56,3 +58,26 @@ def test_server_selects_host_and_printable_five_digit_pin(adapter, monkeypatch, 
     cli.main()
     assert selected == interfaces
     assert calls == [("00042", expected, 8765, {"advertise_service": True})]
+
+
+def test_windows_selects_native_backend_but_dry_run_does_not_load_it(adapter, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setitem(
+        sys.modules, "lanpad.windows", SimpleNamespace(WindowsAdapter=lambda: adapter),
+    )
+    assert cli.input_adapter(False) is adapter
+    monkeypatch.setitem(sys.modules, "lanpad.windows", None)
+    assert isinstance(cli.input_adapter(True), cli.LoggingAdapter)
+
+
+def test_linux_keeps_x11_backend(adapter, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(cli, "X11Adapter", lambda: adapter)
+    assert cli.input_adapter(False) is adapter
+
+
+def test_windows_local_mode_explains_eof(adapter, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    local(adapter)
+    assert "Ctrl+Z then Enter" in capsys.readouterr().out

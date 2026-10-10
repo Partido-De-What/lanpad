@@ -60,8 +60,10 @@ committed. Internet access and `curl`/`unzip`/`sha256sum` are needed initially.
 Following invocations use cached files.
 
 For Android Studio, run `./gradlew --version` once, then open `android/`, let
-Gradle sync, and use Run. Light, dark, and landscape previews are included in
-`LanPadScreen.kt` and use the same composables as the app.
+Gradle sync, and use Run. Light, dark, landscape, and PIN pairing previews are
+included in `LanPadScreen.kt` and use the same composables as the app. Select
+**PIN pairing · light** or **PIN pairing · dark** to render the current discovery
+and pairing sheet with a sample receiver and five-digit PIN.
 
 ## Connect to the computer
 
@@ -105,7 +107,7 @@ the previous gesture's buttons. The phone stays awake while paired.
 ## Interface
 
 See the [interface design reference](design/preview.svg) for the light, dark, and
-connection-sheet layouts (including manual address entry). This is a vector
+connection-sheet layouts (including automatic discovery and PIN entry). This is a vector
 design reference, not a screenshot of the running Android app.
 
 The touchpad is the largest element, with a faint dot texture to identify its

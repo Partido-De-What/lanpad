@@ -72,16 +72,29 @@ async def run(receiver: Receiver, host: str, port: int, *, advertise_service: bo
     """Connect process stop signals to graceful server shutdown and backend cleanup."""
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
-    for signum in (signal.SIGINT, signal.SIGTERM):
-        # Ctrl+C or termination wakes serve's stop.wait() instead of skipping cleanup.
-        loop.add_signal_handler(signum, stop.set)
+    previous = {}
+
+    def request_stop(signum, frame) -> None:
+        # ProactorEventLoop on Windows does not implement add_signal_handler.
+        # Queue the stop on the loop on either OS; release happens in normal cleanup.
+        loop.call_soon_threadsafe(stop.set)
+
     try:
+        signals = [signal.SIGINT, signal.SIGTERM]
+        if hasattr(signal, "SIGBREAK"):
+            signals.append(signal.SIGBREAK)
+        for signum in signals:
+            handler = signal.getsignal(signum)
+            signal.signal(signum, request_stop)
+            previous[signum] = handler
         await serve(receiver, host, port, stop, advertise_service=advertise_service)
     finally:
         # Nested finally blocks close the adapter even if releasing buttons fails.
         try:
             receiver.stop()
         finally:
-            receiver.mouse.adapter.close()
-            for signum in (signal.SIGINT, signal.SIGTERM):
-                loop.remove_signal_handler(signum)
+            try:
+                receiver.mouse.adapter.close()
+            finally:
+                for signum, handler in previous.items():
+                    signal.signal(signum, handler)

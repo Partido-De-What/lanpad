@@ -1,5 +1,6 @@
 package dev.lanpad.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +56,9 @@ import androidx.compose.ui.unit.dp
 import dev.lanpad.PadState
 import dev.lanpad.data.PadSettings
 import dev.lanpad.input.Command
+import dev.lanpad.network.DiscoveredReceiver
+import dev.lanpad.network.DiscoveryState
+import dev.lanpad.network.Endpoint
 import dev.lanpad.network.LinkState
 import dev.lanpad.network.Pairing
 import dev.lanpad.network.Phase
@@ -332,5 +336,21 @@ private fun DarkPreview() {
 private fun LandscapePreview() {
     LanPadTheme(dark = false) {
         LanPadScreen(PadState(settingsReady = true, link = LinkState(Phase.CONNECTED)), PadActions())
+    }
+}
+
+/** Render the actual pairing sheet with a discovered receiver and a complete example PIN. */
+@Preview(name = "PIN pairing · light", showBackground = true, widthDp = 393, heightDp = 852)
+@Preview(name = "PIN pairing · dark", showBackground = true, widthDp = 393, heightDp = 852,
+    uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PinPairingPreview() {
+    val state = PadState(settingsReady = true, pin = "01234", discovery = DiscoveryState(
+        receivers = listOf(DiscoveredReceiver("LanPad workstation", Endpoint("192.168.1.20", 8765))),
+        searching = true,
+    ))
+    LanPadTheme {
+        LanPadScreen(state, PadActions())
+        ConnectionSheet(state, PadActions(), onDismiss = {})
     }
 }

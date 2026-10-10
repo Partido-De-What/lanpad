@@ -1,10 +1,17 @@
 import asyncio
+import json
+import subprocess
 import sys
 from types import SimpleNamespace
 
 import pytest
 
 from lanpad import discovery
+
+
+@pytest.fixture(autouse=True)
+def linux_platform(monkeypatch):
+    monkeypatch.setattr(discovery.sys, "platform", "linux")
 
 
 def address(name, host, *, active=True):
@@ -75,3 +82,64 @@ def test_loopback_skips_discovery_without_loading_zeroconf():
         async with discovery.advertise("127.0.0.1", 8765, True):
             pass
     asyncio.run(scenario())
+
+
+def test_windows_uses_aliases_route_metrics_and_ignores_virtual_adapters(monkeypatch):
+    monkeypatch.setattr(discovery.sys, "platform", "win32")
+    virtual = {**address("vEthernet (Default Switch)", "172.20.0.1"), "virtual": True}
+    interfaces = [virtual, address("Local Area Connection", "192.168.1.2"),
+                  address("Wi-Fi", "192.168.2.3")]
+    routes = [{"dev": virtual["ifname"], "metric": 1},
+              {"dev": "Local Area Connection", "metric": 60},
+              {"dev": "Wi-Fi", "metric": 50}]
+    monkeypatch.setattr(discovery, "_windows_network", lambda: (interfaces, routes))
+    assert discovery.choose_host() == "192.168.2.3"
+    assert discovery.choose_host("Local Area Connection") == "192.168.1.2"
+    assert discovery.choose_host(virtual["ifname"]) == "172.20.0.1"
+    with pytest.raises(RuntimeError, match="No active private LAN"):
+        discovery.choose_host("missing")
+
+
+def test_windows_without_default_route_uses_active_private_interface(monkeypatch):
+    monkeypatch.setattr(discovery.sys, "platform", "win32")
+    monkeypatch.setattr(discovery, "_windows_network", lambda: (
+        [address("Ethernet", "192.168.1.3", active=False),
+         address("Wi-Fi", "10.0.0.2")], [],
+    ))
+    assert discovery.choose_host() == "10.0.0.2"
+
+
+def test_windows_powershell_decodes_utf8_arrays_without_running_a_shell(monkeypatch):
+    calls = []
+    network = {"addresses": [address("Réseau local", "192.168.1.2")], "routes": []}
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(stdout="\ufeff" + json.dumps(network, ensure_ascii=False))
+
+    monkeypatch.setattr(discovery.subprocess, "run", run)
+    assert discovery._windows_network() == (network["addresses"], [])
+    command, options = calls[0]
+    assert command[:5] == [
+        "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+    ]
+    assert options == {"capture_output": True, "encoding": "utf-8", "check": True,
+                       "timeout": 10}
+
+
+@pytest.mark.parametrize("output", ["not json", "{}", '{"addresses":{},"routes":[]}'])
+def test_invalid_windows_metadata_explains_manual_override(monkeypatch, output):
+    monkeypatch.setattr(discovery.subprocess, "run", lambda *args, **kwargs:
+                        SimpleNamespace(stdout=output))
+    with pytest.raises(RuntimeError, match="PowerShell or use --host"):
+        discovery._windows_network()
+
+
+@pytest.mark.parametrize("error", [FileNotFoundError(), subprocess.TimeoutExpired("ps", 10)])
+def test_windows_powershell_failure_explains_manual_override(monkeypatch, error):
+    def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(discovery.subprocess, "run", fail)
+    with pytest.raises(RuntimeError, match="PowerShell or use --host"):
+        discovery._windows_network()
