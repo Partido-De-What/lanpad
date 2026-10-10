@@ -1,0 +1,38 @@
+#!/bin/sh
+# Bootstrap the official wrapper JAR once, then let it manage the pinned Gradle.
+# Both the JAR and distribution are checked against Gradle's published checksums.
+set -eu
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+wrapper_jar="$project_dir/gradle/wrapper/gradle-wrapper.jar"
+wrapper_sha=81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f
+distribution_sha=20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78
+
+if [ ! -f "$wrapper_jar" ]; then
+    for tool in curl unzip sha256sum; do
+        command -v "$tool" >/dev/null || { echo "Install $tool to bootstrap Gradle." >&2; exit 1; }
+    done
+    bootstrap_dir=$(mktemp -d "$project_dir/gradle/wrapper/.bootstrap.XXXXXX")
+    trap 'rm -rf "$bootstrap_dir"' EXIT HUP INT TERM
+    # Extract the release wrapper from the verified release distribution. The
+    # Gradle source repository's own wrapper may belong to an earlier prerelease.
+    curl --fail --location --retry 2 --connect-timeout 10 \
+        https://services.gradle.org/distributions/gradle-8.13-bin.zip \
+        --output "$bootstrap_dir/gradle.zip"
+    printf '%s  %s\n' "$distribution_sha" "$bootstrap_dir/gradle.zip" | sha256sum --check --status
+    wrapper_entry=$(unzip -Z1 "$bootstrap_dir/gradle.zip" | awk '/\/gradle-wrapper-main-8\.13\.jar$/ { print }')
+    test -n "$wrapper_entry"
+    unzip -p "$bootstrap_dir/gradle.zip" "$wrapper_entry" > "$bootstrap_dir/embedded.jar"
+    unzip -p "$bootstrap_dir/embedded.jar" gradle-wrapper.jar > "$bootstrap_dir/wrapper.jar"
+    printf '%s  %s\n' "$wrapper_sha" "$bootstrap_dir/wrapper.jar" | sha256sum --check --status
+    mv "$bootstrap_dir/wrapper.jar" "$wrapper_jar"
+    rm -rf "$bootstrap_dir"
+    trap - EXIT HUP INT TERM
+fi
+
+printf '%s  %s\n' "$wrapper_sha" "$wrapper_jar" | sha256sum --check --status
+if [ -n "${JAVA_HOME:-}" ]; then
+    java_command="$JAVA_HOME/bin/java"
+else
+    java_command=java
+fi
+exec "$java_command" -classpath "$wrapper_jar" org.gradle.wrapper.GradleWrapperMain "$@"

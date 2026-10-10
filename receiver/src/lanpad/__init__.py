@@ -1,0 +1,1 @@
+"""LanPad desktop receiver."""
