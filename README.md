@@ -13,11 +13,18 @@ Control your Linux desktop with the phone already in your pocket. Swipe, click,
 scroll, and drag from a minimal Android touchpad. LanPad finds your computer on
 the local network and pairs with a five-digit PIN.
 
-[Get started](#getting-started) · [How it works](#how-it-works) · [Development](#development)
+[Get started](#getting-started) · [Preview](#preview) · [How it works](#how-it-works) · [Development](#development)
 
 **Status: early development.** The Android app and Linux/X11 receiver are
 implemented. Full build verification, live discovery, and physical-device testing
 remain pending. The current transport is unencrypted; use a trusted private network.
+
+## Preview
+
+[![LanPad Android UI design reference showing light and dark touchpads and the manual connection sheet](android/design/preview.svg)](android/design/preview.svg)
+
+Light and dark themes with a muted teal accent. Vector design reference; device
+screenshots are pending.
 
 ## Features
 
