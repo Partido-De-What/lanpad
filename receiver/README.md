@@ -1,7 +1,7 @@
 # Desktop receiver
 
 A terminal application for Linux with X11 and Windows 10/11. It supports movement, left/right/middle
-clicks, dragging, and horizontal/vertical scrolling. Run it as your desktop user
+clicks, dragging, horizontal/vertical scrolling, atomic keyboard chords, and Unicode text. Run it as your desktop user
 inside the X11 session on Linux, or as your signed-in desktop user on Windows.
 A GUI or tray icon is planned.
 
@@ -30,6 +30,15 @@ changes are unnecessary. For real cursor input, stop the dry run with Ctrl+C and
 
 Runtime dependencies are `websockets`, `zeroconf`, and, on Linux only, `python-xlib`. Linux's
 `iproute2` supplies interface information for automatic address selection.
+Text entry uses XTEST and the active X11 keymap directly; `xdotool` is no
+longer required. Unicode characters temporarily use otherwise-unmapped keycodes,
+which are restored after typing. Keep app and receiver on protocol v4.
+Remembered-device signatures use the `cryptography` Python package, installed
+with the receiver. The CLI saves a private, integrity-sensitive public-key registry
+at `~/.config/lanpad/devices.json` (or `$XDG_CONFIG_HOME/lanpad/devices.json`).
+Use `--trust-file PATH` to override it. To revoke all phones, stop the receiver,
+run `lanpad --forget-devices`, and restart. Trust expires after 90 days. See the
+[security assessment](../docs/SECURITY.md) for the remaining plaintext LAN risk.
 A virtual environment keeps project dependencies separate from system Python.
 No Android SDK
 or JDK is needed for the receiver.
@@ -59,6 +68,8 @@ Enter one command per line:
 {"type":"scroll","dx":0,"dy":1}
 {"type":"scroll","dx":1,"dy":0}
 {"type":"button","button":"left","down":true}
+{"type":"key","key":"enter","modifiers":["super"]}
+{"type":"text","text":"Caffè"}
 {"type":"release_all"}
 ```
 
@@ -139,7 +150,7 @@ unavailable, use `--host` with your private LAN address. Allow Python on the
 Transport is unencrypted in this development version. Verified encryption is
 still required before regular use. PINs change on every restart. Five failed
 pairing attempts in 60 seconds temporarily block new pairing across all clients;
-wait one minute before trying again. Update both endpoints for protocol v2.
+wait one minute before trying again. Update both endpoints for protocol v4.
 
 ## Design
 

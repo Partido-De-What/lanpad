@@ -47,8 +47,8 @@ async def start(receiver, port, stop):
 
 
 async def pair(socket, pin=PIN):
-    await socket.send(json.dumps({"type": "pair", "version": 2, "pin": pin}))
-    assert json.loads(await socket.recv()) == {"type": "paired", "version": 2}
+    await socket.send(json.dumps({"type": "pair", "version": 4, "pin": pin}))
+    assert json.loads(await socket.recv()) == {"type": "paired", "version": 4}
 
 
 def test_real_pairing_input_and_disconnect(adapter, port):
@@ -62,6 +62,8 @@ def test_real_pairing_input_and_disconnect(adapter, port):
                     {"type": "move", "dx": 9, "dy": -2},
                     {"type": "click", "button": "right"},
                     {"type": "scroll", "dx": 0, "dy": 1},
+                    {"type": "key", "key": "enter", "modifiers": ["super"]},
+                    {"type": "text", "text": "Caffè 😀"},
                     {"type": "button", "button": "left", "down": True},
                 ]:
                     await socket.send(json.dumps(message))
@@ -69,7 +71,9 @@ def test_real_pairing_input_and_disconnect(adapter, port):
             await eventually(lambda: receiver.active is None)
             assert adapter.events == [
                 ("move", 9, -2), ("button", "right", True), ("button", "right", False),
-                ("scroll", 0, 1), ("button", "left", True), ("button", "left", False),
+                ("scroll", 0, 1), ("key", "super", True), ("key", "enter", True),
+                ("key", "enter", False), ("key", "super", False), ("text", "Caffè 😀"),
+                ("button", "left", True), ("button", "left", False),
             ]
         finally:
             stop.set()

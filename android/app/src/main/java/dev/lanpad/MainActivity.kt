@@ -42,6 +42,8 @@ class MainActivity : ComponentActivity() {
                     refreshDiscovery = model::refreshDiscovery,
                     sensitivity = model::sensitivity,
                     saveSensitivity = model::saveSensitivity,
+                    rememberDevice = model::rememberDevice,
+                    forgetDevices = model::forgetDevices,
                 )
             }
             LanPadTheme { LanPadScreen(state, actions) }

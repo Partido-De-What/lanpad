@@ -28,7 +28,7 @@ class PadClientTest {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 messages.offer(text)
                 if (JSONObject(text).getString("type") == "pair") {
-                    webSocket.send("{\"type\":\"paired\",\"version\":2}")
+                    webSocket.send("{\"type\":\"paired\",\"version\":4}")
                 }
             }
 
@@ -58,6 +58,13 @@ class PadClientTest {
             assertTrue(press.getBoolean("down"))
             assertEquals("move", movement.getString("type"))
             assertEquals(12.0, movement.getDouble("dx"), 0.001)
+            client.offer(Command.Text("Caffè 😀"))
+            client.offer(Command.Key("enter", listOf("super")))
+            val text = JSONObject(requireNotNull(messages.poll(3, TimeUnit.SECONDS)))
+            val key = JSONObject(requireNotNull(messages.poll(3, TimeUnit.SECONDS)))
+            assertEquals("Caffè 😀", text.getString("text"))
+            assertEquals("key", key.getString("type"))
+            assertEquals("super", key.getJSONArray("modifiers").getString(0))
             val heartbeat = JSONObject(requireNotNull(messages.poll(3, TimeUnit.SECONDS)))
             assertEquals("heartbeat", heartbeat.getString("type"))
             client.disconnect()

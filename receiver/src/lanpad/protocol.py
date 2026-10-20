@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-VERSION = 2
+VERSION = 4
 MAX_MESSAGE_BYTES = 1024
 ButtonName = Literal["left", "right", "middle"]
 
@@ -62,7 +62,33 @@ class Heartbeat:
     pass
 
 
-type Command = Move | Scroll | Button | Click | ReleaseAll | Heartbeat
+MODIFIERS = frozenset({"ctrl", "alt", "shift", "super"})
+KEYS = frozenset(
+    list("abcdefghijklmnopqrstuvwxyz0123456789")
+    + ["enter", "tab", "escape", "backspace", "delete", "space", "left", "right",
+       "up", "down", "home", "end", "page_up", "page_down", "insert"]
+    + [f"f{i}" for i in range(1, 13)]
+    + ["volume_up", "volume_down", "volume_mute", "mic_mute",
+       "brightness_up", "brightness_down"]
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Key:
+    """An atomic key tap with optional modifiers; no persistent keyboard holds."""
+
+    key: str
+    modifiers: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Text:
+    """Type a bounded Unicode text fragment, independent of shortcut modifiers."""
+
+    text: str
+
+
+type Command = Move | Scroll | Button | Click | Key | Text | ReleaseAll | Heartbeat
 
 
 def _object(pairs: list[tuple[str, object]]) -> dict:
@@ -147,6 +173,24 @@ def parse_command(raw: str | bytes) -> Command:
         case "click":
             _fields(message, "button")
             return Click(_button(message["button"]))
+        case "key":
+            _fields(message, "key", "modifiers")
+            key, modifiers = message["key"], message["modifiers"]
+            if not isinstance(key, str) or key not in KEYS:
+                raise ProtocolError("Unknown key")
+            if (not isinstance(modifiers, list) or len(modifiers) > 4
+                    or any(not isinstance(m, str) or m not in MODIFIERS for m in modifiers)
+                    or len(set(modifiers)) != len(modifiers)):
+                raise ProtocolError("Invalid modifiers")
+            return Key(key, tuple(modifiers))
+        case "text":
+            _fields(message, "text")
+            text = message["text"]
+            if (not isinstance(text, str) or not 1 <= len(text) <= 128
+                    or any((ord(c) < 32 and c not in "\n\t") or ord(c) == 127
+                           or 0xD800 <= ord(c) <= 0xDFFF for c in text)):
+                raise ProtocolError("Text must contain 1–128 characters without control codes")
+            return Text(text)
         case "release_all" | "heartbeat" as kind:
             _fields(message)
             return ReleaseAll() if kind == "release_all" else Heartbeat()

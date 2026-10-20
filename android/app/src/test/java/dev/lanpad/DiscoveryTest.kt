@@ -11,19 +11,19 @@ class DiscoveryTest {
         listOf("1234", "123456", "１２３４５", "12a45", " 12345").forEach { assertFalse(Pairing.validPin(it)) }
         val message = JSONObject(Pairing.message("00042"))
         assertEquals("00042", message.getString("pin"))
-        assertEquals(2, message.getInt("version"))
+        assertEquals(4, message.getInt("version"))
         // keys() is available in both Android's JSONObject and the JVM test library.
         assertEquals(setOf("type", "pin", "version"), message.keys().asSequence().toSet())
     }
 
     @Test fun unsupportedOrPublicAdvertisementsAreIgnored() {
         assertNull(discoveredReceiver("Computer", listOf("192.168.1.2"), 8765, "1"))
-        assertNull(discoveredReceiver("Computer", listOf("8.8.8.8", "127.0.0.1"), 8765, "2"))
-        assertNull(discoveredReceiver("Computer", listOf("192.168.1.2"), 0, "2"))
+        assertNull(discoveredReceiver("Computer", listOf("8.8.8.8", "127.0.0.1"), 8765, "4"))
+        assertNull(discoveredReceiver("Computer", listOf("192.168.1.2"), 0, "4"))
     }
 
     @Test fun discoveryUsesAnAdvertisedLanAddressAndCustomPort() {
-        val receiver = discoveredReceiver("Computer", listOf("::1", "192.168.1.2"), 9876, "2")!!
+        val receiver = discoveredReceiver("Computer", listOf("::1", "192.168.1.2"), 9876, "4")!!
         assertEquals(Endpoint("192.168.1.2", 9876), receiver.endpoint)
     }
 

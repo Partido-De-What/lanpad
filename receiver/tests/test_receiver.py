@@ -33,7 +33,7 @@ class Connection:
 
 
 def pair(pin=PIN):
-    return json.dumps({"type": "pair", "version": 2, "pin": pin})
+    return json.dumps({"type": "pair", "version": 4, "pin": pin})
 
 
 def run(coro):
@@ -56,7 +56,7 @@ def test_paired_controller_can_move_click_scroll_and_disconnect(adapter):
         ]:
             connection.input(message)
         await receiver.handle(connection)
-        assert await connection.outgoing.get() == {"type": "paired", "version": 2}
+        assert await connection.outgoing.get() == {"type": "paired", "version": 4}
         assert connection.closed[0] == 1000
         assert receiver.active is None
         assert adapter.events == [
@@ -266,7 +266,7 @@ def test_pin_failures_are_limited_across_connections_and_expire(adapter, monkeyp
         clock[0] += module.PAIR_FAILURE_WINDOW
         accepted = Connection(pair(), None)
         await receiver.handle(accepted)
-        assert await accepted.outgoing.get() == {"type": "paired", "version": 2}
+        assert await accepted.outgoing.get() == {"type": "paired", "version": 4}
         assert not receiver.failed_pairs
     run(scenario())
 
@@ -280,7 +280,7 @@ def test_pending_connections_cannot_bypass_pin_failure_limit(adapter, monkeypatc
         tasks = [asyncio.create_task(receiver.handle(connection)) for connection in pending]
         await asyncio.sleep(0)
         for connection in pending:
-            connection.input({"type": "pair", "version": 2, "pin": "99999"})
+            connection.input({"type": "pair", "version": 4, "pin": "99999"})
         await asyncio.gather(*tasks)
         failures = sum(connection.closed[0] == 4001 for connection in pending)
         assert failures == module.MAX_FAILED_PAIRS

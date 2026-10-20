@@ -73,7 +73,7 @@ def test_announcement_uses_bound_address_port_version_and_always_closes(monkeypa
     asyncio.run(scenario())
     assert events[0] == {"interfaces": ["192.168.1.2"], "ip_version": "ipv4"}
     assert events[1]["port"] == 9876
-    assert events[1]["properties"] == {"version": "2"}
+    assert events[1]["properties"] == {"version": "4"}
     assert events[-1] == "closed"
 
 

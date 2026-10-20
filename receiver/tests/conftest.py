@@ -15,6 +15,12 @@ class RecordingAdapter:
     def button(self, button, down):
         self.events.append(("button", button, down))
 
+    def key(self, key, down):
+        self.events.append(("key", key, down))
+
+    def text(self, text):
+        self.events.append(("text", text))
+
     def close(self):
         self.closed = True
 

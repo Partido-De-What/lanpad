@@ -6,6 +6,18 @@ newer (`minSdk 23`), and targets Android 16. Physical-device
 verification remains required; configuration alone does not prove behavior on
 every phone.
 
+Tap the keyboard icon in the header to switch between touchpad and keyboard
+modes. Keyboard mode includes a 128-unit text composer with a separate Enter
+button, persistent modifier selections, navigation/editing/function keys, and grouped i3
+bindings from the owner's configuration. The i3 controls are a static snapshot
+in `input/Shortcuts.kt`; they use Super/Mod4 and include the custom Super+O
+horizontal split and Super+Shift+T floating toggle. Workspaces support switching
+and moving the focused window. Linux Unicode typing uses XTEST directly. Remembered phones enroll a public key
+after PIN authentication and reconnect using a private Android Keystore signing
+key. Remembered computers show a PIN-free reconnect view; connected computers
+show their status and remaining trust duration. The receiver refreshes the
+reported expiry each connection; trust lasts 90 days from PIN enrollment. Both endpoints must use protocol v4.
+
 ## Build and install
 
 On Linux x86_64, with Java 21, `curl`, `unzip`, and `sha256sum` installed, you can
@@ -91,7 +103,7 @@ manually** with the receiver's printed address and port. On a multi-network PC,
 for discovery and TCP 8765 (or the chosen port) for control. Guest Wi-Fi isolation
 can block both. The PIN changes when the receiver restarts and is never advertised.
 After five failed PIN attempts within 60 seconds, wait one minute to retry.
-Both endpoints must use protocol v2; rebuild and reinstall the app after updating.
+Both endpoints must use protocol v4; rebuild and reinstall the app after updating.
 
 - Move one finger to move the cursor; a short stationary tap left-clicks.
 - Move two fingers to scroll horizontally or vertically with natural scrolling.

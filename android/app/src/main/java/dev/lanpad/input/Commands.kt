@@ -1,6 +1,7 @@
 package dev.lanpad.input
 
 import org.json.JSONObject
+import org.json.JSONArray
 
 /** Typed commands mirror the receiver's protocol; UI code never builds raw JSON. */
 sealed interface Command {
@@ -8,11 +9,13 @@ sealed interface Command {
     data class Scroll(val dx: Float, val dy: Float) : Command
     data class Button(val name: String, val down: Boolean) : Command
     data class Click(val name: String) : Command
+    data class Key(val key: String, val modifiers: List<String> = emptyList()) : Command
+    data class Text(val text: String) : Command
     data object ReleaseAll : Command
     data object Heartbeat : Command
 }
 
-/** Encode exactly the input fields accepted by receiver protocol version 2. */
+/** Encode exactly the input fields accepted by receiver protocol version 4. */
 fun Command.toJson(): String = JSONObject().apply {
     when (val command = this@toJson) {
         is Command.Move -> { put("type", "move"); put("dx", command.dx); put("dy", command.dy) }
@@ -21,6 +24,8 @@ fun Command.toJson(): String = JSONObject().apply {
             put("type", "button"); put("button", command.name); put("down", command.down)
         }
         is Command.Click -> { put("type", "click"); put("button", command.name) }
+        is Command.Key -> { put("type", "key"); put("key", command.key); put("modifiers", JSONArray(command.modifiers)) }
+        is Command.Text -> { put("type", "text"); put("text", command.text) }
         Command.ReleaseAll -> put("type", "release_all")
         Command.Heartbeat -> put("type", "heartbeat")
     }

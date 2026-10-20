@@ -181,6 +181,48 @@ class WindowsAdapter:
         if events:
             self._send(events)
 
+    def _keyboard(self, events: Sequence[tuple[int, int, int]]) -> None:
+        if self._closed:
+            raise RuntimeError("The Windows input adapter is closed")
+        inputs = (INPUT * len(events))()
+        for slot, (vk, scan, flags) in zip(inputs, events, strict=True):
+            slot.type = 1  # INPUT_KEYBOARD
+            slot.ki.wVk, slot.ki.wScan, slot.ki.dwFlags = vk, scan, flags
+        sent = self._send_input(len(events), inputs, ctypes.sizeof(INPUT))
+        if sent != len(events):
+            raise SendInputError(sent, len(events), self._get_last_error())
+
+    def key(self, key: str, down: bool) -> None:
+        codes = {
+            "ctrl": 0x11, "alt": 0x12, "shift": 0x10, "super": 0x5B,
+            "enter": 0x0D, "tab": 0x09, "escape": 0x1B, "backspace": 0x08,
+            "delete": 0x2E, "insert": 0x2D, "space": 0x20, "left": 0x25,
+            "up": 0x26, "right": 0x27, "down": 0x28, "home": 0x24, "end": 0x23,
+            "page_up": 0x21, "page_down": 0x22, "volume_up": 0xAF,
+            "volume_down": 0xAE, "volume_mute": 0xAD,
+        }
+        codes.update({f"f{i}": 0x6F + i for i in range(1, 13)})
+        codes.update({c: ord(c.upper()) for c in "abcdefghijklmnopqrstuvwxyz0123456789"})
+        if key not in codes:
+            raise ValueError(f"Key is not supported on Windows: {key}")
+        extended = key in {"super", "left", "right", "up", "down", "home", "end",
+                           "page_up", "page_down", "insert", "delete"}
+        self._keyboard([(codes[key], 0, (0 if down else 2) | int(extended))])
+
+    def text(self, text: str) -> None:
+        # SendInput consumes UTF-16 code units, including surrogate pairs for emoji.
+        events = []
+        for char in text:
+            if char in "\n\t":
+                vk = 0x0D if char == "\n" else 0x09
+                events.extend([(vk, 0, 0), (vk, 0, 2)])
+            else:
+                encoded = char.encode("utf-16-le")
+                for i in range(0, len(encoded), 2):
+                    unit = int.from_bytes(encoded[i:i + 2], "little")
+                    events.extend([(0, unit, 4), (0, unit, 6)])
+        self._keyboard(events)
+
     def close(self) -> None:
         # SendInput holds no handle; this only stops further injection. Idempotent.
         self._closed = True

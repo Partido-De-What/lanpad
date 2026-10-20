@@ -4,8 +4,10 @@ import argparse
 import asyncio
 import ipaddress
 import logging
+import os
 import secrets
 import sys
+from pathlib import Path
 
 from .adapters import LoggingAdapter, X11Adapter
 from .discovery import choose_host, is_lan_address
@@ -13,6 +15,7 @@ from .mouse import InputAdapter, MouseSession
 from .protocol import parse_command
 from .receiver import Receiver
 from .server import run
+from .trust import TrustStore
 
 
 def bind_address(value: str) -> str:
@@ -80,9 +83,20 @@ def main() -> None:
     parser.add_argument("--no-discovery", action="store_true", help="Disable mDNS advertisement")
     parser.add_argument("--port", type=port_number, default=8765)
     parser.add_argument("--dry-run", action="store_true", help="Log input without moving the mouse")
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+    parser.add_argument("--trust-file", type=Path,
+                        default=config_home
+                        / "lanpad" / "devices.json", help="Trusted-device registry path")
+    parser.add_argument("--forget-devices", action="store_true", help="Revoke all trusted phones")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
+        if args.forget_devices:
+            trust = TrustStore(args.trust_file)
+            trust.devices.clear()
+            trust.save()
+            print("All trusted phones revoked. Restart any running receiver to apply.")
+            return
         if args.command == "serve":
             # Check transport availability before opening the native input backend.
             import websockets.asyncio.server  # noqa: F401
@@ -92,7 +106,8 @@ def main() -> None:
             local(adapter)
         else:
             # Keep the PIN as text so values such as 00042 retain all five digits.
-            receiver = Receiver(adapter, f"{secrets.randbelow(100_000):05d}")
+            receiver = Receiver(adapter, f"{secrets.randbelow(100_000):05d}",
+                                TrustStore(args.trust_file))
             # asyncio.run owns the event loop used by the receiver's async functions.
             asyncio.run(run(receiver, host, args.port, advertise_service=not args.no_discovery))
     except KeyboardInterrupt:

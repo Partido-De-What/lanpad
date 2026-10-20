@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -78,12 +79,16 @@ data class PadActions(
     val refreshDiscovery: () -> Unit = {},
     val sensitivity: (Float) -> Unit = {},
     val saveSensitivity: () -> Unit = {},
+    val rememberDevice: (Boolean) -> Unit = {},
+    val forgetDevices: () -> Unit = {},
 )
 
 /** The main surface stays focused on control; connection details live in a sheet. */
 @Composable
 fun LanPadScreen(state: PadState, actions: PadActions) {
     var showConnection by rememberSaveable { mutableStateOf(false) }
+    var keyboardMode by rememberSaveable { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
     val release by rememberUpdatedState(actions.releaseAll)
     val enabled = state.link.ready && !showConnection
     DisposableEffect(enabled) {
@@ -95,17 +100,27 @@ fun LanPadScreen(state: PadState, actions: PadActions) {
         showConnection = true
     }
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-        BoxWithConstraints(Modifier.safeDrawingPadding().padding(horizontal = 24.dp, vertical = 16.dp)) {
+        BoxWithConstraints(Modifier.safeDrawingPadding().imePadding().padding(horizontal = 24.dp, vertical = 16.dp)) {
             val wide = maxWidth >= 600.dp
             val compact = !wide && maxHeight < 560.dp
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                Header(state, actions.disconnect, openSettings)
+                Header(state, actions.disconnect, openSettings, keyboardMode) {
+                    actions.releaseAll()
+                    keyboard?.hide()
+                    keyboardMode = !keyboardMode
+                }
                 // Keep Stop fixed at the top; small screens can scroll the controls below it.
                 Column(Modifier.weight(1f).fillMaxWidth().then(
-                    if (compact) Modifier.verticalScroll(rememberScrollState()) else Modifier
+                    if (compact && !keyboardMode) Modifier.verticalScroll(rememberScrollState()) else Modifier
                 ), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                     ConnectionCard(state, openSettings)
-                    if (wide) {
+                    if (state.link.ready && state.link.message.isNotBlank()) {
+                        Text(state.link.message, color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (keyboardMode) {
+                        KeyboardPanel(enabled, actions.input, Modifier.weight(1f).fillMaxWidth())
+                    } else if (wide) {
                         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                             Touchpad(enabled, actions.input, Modifier.weight(1f).fillMaxSize())
                             Column(Modifier.width(240.dp).verticalScroll(rememberScrollState()),
@@ -131,7 +146,8 @@ fun LanPadScreen(state: PadState, actions: PadActions) {
 
 /** Brand, explicit connection status, and a stop action that stays within reach. */
 @Composable
-private fun Header(state: PadState, disconnect: () -> Unit, openSettings: () -> Unit) {
+private fun Header(state: PadState, disconnect: () -> Unit, openSettings: () -> Unit,
+                   keyboardMode: Boolean, toggleMode: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(42.dp).background(colors.primaryContainer, RoundedCornerShape(14.dp)),
@@ -153,6 +169,9 @@ private fun Header(state: PadState, disconnect: () -> Unit, openSettings: () -> 
                 }, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
             }
         }
+        IconButton(onClick = toggleMode, modifier = Modifier.semantics {
+            contentDescription = if (keyboardMode) "Switch to mouse" else "Switch to keyboard"
+        }) { PadIcon(if (keyboardMode) Symbol.PAD else Symbol.KEYBOARD, color = colors.primary) }
         if (state.link.ready || state.link.busy) {
             TextButton(onClick = disconnect) {
                 PadIcon(Symbol.STOP, Modifier.size(16.dp), colors.primary)
@@ -182,8 +201,9 @@ private fun ConnectionCard(state: PadState, openSettings: () -> Unit) {
                     Text(when {
                         state.link.message.isNotBlank() -> state.link.message
                         state.link.ready -> state.settings.host
-                        state.link.phase == Phase.PAIRING -> "Checking your pairing PIN"
+                        state.link.phase == Phase.PAIRING -> if (state.canResume) "Verifying remembered phone" else "Checking your pairing PIN"
                         state.link.busy -> "Keep the receiver running"
+                        state.canResume -> "${state.selectedReceiver?.name ?: state.settings.host} · ${state.trustDaysRemaining} days of auto-connect"
                         state.selectedReceiver != null -> "${state.selectedReceiver?.name} · ready to pair"
                         state.discovery.receivers.size > 1 -> "Choose a computer to pair"
                         state.discovery.searching -> "Looking for your computer…"
@@ -235,6 +255,7 @@ private fun GestureHint() {
 @Composable
 private fun ConnectionSheet(state: PadState, actions: PadActions, onDismiss: () -> Unit) {
     var showPin by rememberSaveable { mutableStateOf(false) }
+    var pairAgain by rememberSaveable { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     val connect = {
         if (actions.connect()) {
@@ -248,9 +269,17 @@ private fun ConnectionSheet(state: PadState, actions: PadActions, onDismiss: () 
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (state.link.ready) {
+                ConnectedDetails(state, actions, onDismiss)
+            } else if (state.link.busy) {
+                Text("Connecting to your computer", style = MaterialTheme.typography.headlineLarge)
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(if (state.canResume) "Verifying your remembered phone…" else "Checking your pairing PIN…")
+                FilledTonalButton(onClick = actions.disconnect, modifier = Modifier.fillMaxWidth()) { Text("Cancel connection") }
+            } else {
             Column {
                 Text("A connection away.", style = MaterialTheme.typography.headlineLarge)
-                Text("Choose your computer and enter its five-digit PIN.", Modifier.padding(top = 8.dp),
+                Text(if (state.canResume) "Choose your remembered computer to reconnect." else "Choose your computer and enter its five-digit PIN.", Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (!state.manualAddress) ReceiverChoices(state, actions)
@@ -268,21 +297,35 @@ private fun ConnectionSheet(state: PadState, actions: PadActions, onDismiss: () 
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                     shape = RoundedCornerShape(16.dp))
             }
+            val remembered = state.canResume && state.rememberDevice && !pairAgain
+            if (remembered) {
+                TrustStatus(state.trustDaysRemaining)
+                TextButton(onClick = { pairAgain = true }) { Text("Pair again with a PIN") }
+            } else {
             OutlinedTextField(value = state.pin, onValueChange = actions.pin,
                 label = { Text("Pairing PIN") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                supportingText = { Text("Five digits shown in your computer's receiver terminal.") },
+                supportingText = { Text("First connection: enter the PIN. Remembered computer: leave blank.") },
                 visualTransformation = if (showPin) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = { TextButton(onClick = { showPin = !showPin }) { Text(if (showPin) "Hide" else "Show") } },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { if (!state.link.busy) connect() }),
                 shape = RoundedCornerShape(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = state.rememberDevice, onCheckedChange = actions.rememberDevice)
+                Column {
+                    Text("Remember this phone", style = MaterialTheme.typography.labelLarge)
+                    Text("Trusted LAN only · expires after 90 days", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            }
+            TextButton(onClick = { pairAgain = false; actions.forgetDevices() }) { Text("Forget saved computers on this phone") }
             state.formError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
             Button(onClick = connect, enabled = state.settingsReady && !state.link.busy &&
-                Pairing.validPin(state.pin) && (state.manualAddress || state.selectedReceiver != null),
+                (Pairing.validPin(state.pin) || (remembered && state.pin.isEmpty())) && (state.manualAddress || state.selectedReceiver != null),
                 modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)) {
-                Text(if (state.link.ready) "Reconnect" else "Connect")
+                Text(if (remembered) "Reconnect" else "Connect")
                 Spacer(Modifier.width(8.dp))
                 PadIcon(Symbol.ARROW, color = MaterialTheme.colorScheme.onPrimary)
             }
@@ -290,10 +333,40 @@ private fun ConnectionSheet(state: PadState, actions: PadActions, onDismiss: () 
                 FilledTonalButton(onClick = { actions.disconnect(); onDismiss() },
                     modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Disconnect") }
             }
-            Text("Your pairing PIN isn't saved on this phone.",
+            Text("Your PIN is never saved. Remembered connections use a device key.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
+}
+
+@Composable
+private fun TrustStatus(days: Long) {
+    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(if (days > 0) "Auto-connect valid for $days ${if (days == 1L) "day" else "days"}"
+                else "Auto-connect has expired", style = MaterialTheme.typography.titleMedium)
+            Text("Validity is checked with your computer each time you connect.",
+                style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun ConnectedDetails(state: PadState, actions: PadActions, onDismiss: () -> Unit) {
+    Text("You're connected", style = MaterialTheme.typography.headlineLarge)
+    Text(state.settings.receiverName.ifBlank { state.settings.host.ifBlank { "Your computer" } },
+        style = MaterialTheme.typography.titleLarge)
+    if (state.settings.host.isNotBlank()) Text("${state.settings.host}:${state.settings.port}",
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (state.link.trustExpiresAt != null || state.trustExpiresAt > 0) {
+        TrustStatus(state.trustDaysRemaining)
+    } else {
+        Text("This connection uses a PIN. Remember this phone when you next pair to enable auto-connect.")
+    }
+    Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Continue controlling") }
+    FilledTonalButton(onClick = actions.disconnect, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Disconnect") }
+    TextButton(onClick = actions.forgetDevices) { Text("Disconnect & forget saved computers") }
 }
 
 /** One receiver is selected automatically; more results get an explicit, accessible choice. */

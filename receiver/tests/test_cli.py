@@ -39,7 +39,7 @@ def test_local_test_releases_on_eof(adapter, monkeypatch):
     (["--host", "127.0.0.1"], "127.0.0.1", []),
 ])
 def test_server_selects_host_and_printable_five_digit_pin(adapter, monkeypatch, arguments,
-                                                        expected, interfaces):
+                                                        expected, interfaces, tmp_path):
     selected = []
     calls = []
 
@@ -50,7 +50,8 @@ def test_server_selects_host_and_printable_five_digit_pin(adapter, monkeypatch, 
     async def serve(receiver, host, port, **options):
         calls.append((receiver.pin, host, port, options))
 
-    monkeypatch.setattr("sys.argv", ["lanpad", "--dry-run", *arguments])
+    monkeypatch.setattr("sys.argv", ["lanpad", "--dry-run", "--trust-file",
+                                     str(tmp_path / "devices.json"), *arguments])
     monkeypatch.setattr(cli, "choose_host", choose)
     monkeypatch.setattr(cli, "LoggingAdapter", lambda: adapter)
     monkeypatch.setattr(cli.secrets, "randbelow", lambda maximum: 42)

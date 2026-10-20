@@ -3,7 +3,18 @@
 import math
 from typing import Protocol
 
-from .protocol import Button, ButtonName, Click, Command, Heartbeat, Move, ReleaseAll, Scroll
+from .protocol import (
+    Button,
+    ButtonName,
+    Click,
+    Command,
+    Heartbeat,
+    Key,
+    Move,
+    ReleaseAll,
+    Scroll,
+    Text,
+)
 
 
 class InputAdapter(Protocol):
@@ -21,6 +32,14 @@ class InputAdapter(Protocol):
         """Inject a button press or release."""
         ...
 
+    def key(self, key: str, down: bool) -> None:
+        """Inject a named key press or release."""
+        ...
+
+    def text(self, text: str) -> None:
+        """Type Unicode text."""
+        ...
+
     def close(self) -> None:
         """Release the backend's resources after held buttons have been released."""
         ...
@@ -33,6 +52,7 @@ class MouseSession:
         """Attach the backend and start with no held buttons or fractional input."""
         self.adapter = adapter
         self.held: set[ButtonName] = set()
+        self.held_keys: list[str] = []
         self._remainders = {Move: (0.0, 0.0), Scroll: (0.0, 0.0)}
 
     def apply(self, command: Command) -> None:
@@ -59,6 +79,15 @@ class MouseSession:
                 if button not in self.held:
                     self._button(button, True)
                     self._button(button, False)
+            case Key(key, modifiers):
+                try:
+                    for name in (*modifiers, key):
+                        self.held_keys.append(name)
+                        self.adapter.key(name, True)
+                finally:
+                    self._release_keys()
+            case Text(text):
+                self.adapter.text(text)
             case ReleaseAll():
                 self.release_all()
             case Heartbeat():
@@ -76,6 +105,17 @@ class MouseSession:
             self.adapter.button(button, False)
             self.held.remove(button)
 
+    def _release_keys(self) -> None:
+        failures = []
+        for key in self.held_keys[::-1]:
+            try:
+                self.adapter.key(key, False)
+                self.held_keys.remove(key)
+            except Exception as exc:
+                failures.append(exc)
+        if failures:
+            raise ExceptionGroup("Could not release keyboard keys", failures)
+
     def release_all(self) -> None:
         """Release held buttons and clear fractions, collecting any backend failures."""
         failures = []
@@ -86,6 +126,10 @@ class MouseSession:
                 self._button(button, False)
             except Exception as exc:
                 failures.append(exc)
+        try:
+            self._release_keys()
+        except Exception as exc:
+            failures.append(exc)
         self._remainders = {Move: (0.0, 0.0), Scroll: (0.0, 0.0)}
         if failures:
             raise ExceptionGroup("Could not release mouse buttons", failures)

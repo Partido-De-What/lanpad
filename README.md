@@ -11,7 +11,7 @@
 [![Early development](https://img.shields.io/badge/Status-early_development-E9B44C?style=flat-square)](#next-steps)
 
 Control your Linux/X11 or Windows desktop with the phone already in your pocket. Swipe, click,
-scroll, and drag from a minimal Android touchpad. LanPad finds your computer on
+scroll, drag, type text, and send shortcuts from an Android remote control. LanPad finds your computer on
 the local network and pairs with a five-digit PIN.
 
 [Get started](#getting-started) · [Preview](#preview) · [How it works](#how-it-works) · [Development](#development)
@@ -35,8 +35,11 @@ pairing components in `LanPadScreen.kt`.
 - Two-finger horizontal and vertical scrolling.
 - Left and right mouse buttons, with hold-and-drag support.
 - Adjustable pointer speed.
+- Mouse/keyboard icon switch, Unicode text composer, navigation and function keys.
+- Persistent Ctrl/Alt/Shift/Super selections and common editing actions.
+- Personal i3 shortcuts for apps, workspaces, windows, layouts, resizing, and media.
 - Automatic computer discovery with mDNS/DNS-SD, with manual address fallback.
-- Five-digit PIN pairing and one active controller per receiver.
+- First-use PIN pairing, remembered phones with Keystore signing keys, and one active controller.
 - Connection status, bounded reconnect attempts, and an immediate Stop action.
 - Release of held buttons on disconnect, app backgrounding, or receiver shutdown.
 - Minimal Material 3 interface with light/dark themes and a muted teal accent.
@@ -142,10 +145,39 @@ Move one finger to control the pointer, tap to left-click, and use two fingers t
 scroll. Hold **Left** while moving another finger to drag. Adjust **Pointer speed**
 as needed; tap **Stop** to disconnect.
 
+Tap the **keyboard icon** beside the connection status to switch modes. In
+**Type & keys**, compose text and tap **Send text**; **Enter ↵** is a separate
+action, so sending a single-line shell command does not execute it automatically.
+Newlines explicitly included in text are sent. Modifier chips stay selected until toggled off or cleared; each key tap still
+presses and releases a complete chord. Disconnecting clears selections. Use **Show letters & numbers** for combinations such as Ctrl+R.
+Tap the touchpad icon to return to mouse mode.
+
+**i3 shortcuts** embeds the bindings from your i3 configuration, with Super as
+Mod4. Categories cover Apps, Windows, Layout, Media, Session, and Workspaces.
+Workspace 10 sends Super+0; **Move window to** adds Shift. In Layout, enter
+**Resize mode**, adjust with its plain arrow controls, and tap **Done ↵** or
+**Escape** to exit. Bindings are a static snapshot in
+`android/app/src/main/java/dev/lanpad/input/Shortcuts.kt`; changing the desktop
+config does not automatically update the app. These controls require i3.
+
+Update the receiver alongside this app: keyboard support uses protocol v4.
+On Linux, text, mouse control, and key chords use XTEST directly; no
+`xdotool` installation is required. Windows text and keys use native SendInput (mic mute and brightness
+keys are Linux-only).
+
 The PIN changes each time the receiver starts and is never saved on the phone.
+With **Remember this phone** enabled, first-time pairing registers the phone's
+Keystore public key. Later connections hide the PIN field and offer **Reconnect**; trust survives
+app/receiver restarts and expires after 90 days. Connection settings show the connected computer and
+**Auto-connect valid for N days**, updated from the receiver on each connection.
+The countdown does not extend the original expiry. **Pair again with a PIN**
+re-pairs the device and renews trust. Use **Forget saved computers on this phone** to clear local
+mappings; to revoke phones on the receiver, stop it, run `lanpad --forget-devices`,
+and restart. See the [security assessment](docs/SECURITY.md): remembered pairing
+prevents captured-proof replay, but input transport still requires a trusted LAN.
 Five failed pairing attempts within 60 seconds temporarily block new pairing;
 wait one minute before retrying. Keep the app and receiver updated together:
-both currently use [protocol v2](docs/PROTOCOL.md).
+both currently use [protocol v4](docs/PROTOCOL.md).
 
 ## Connection troubleshooting
 
@@ -188,15 +220,16 @@ With an authorized phone or emulator connected, run the Compose UI tests:
 (cd android && ./gradlew :app:connectedDebugAndroidTest)
 ```
 
-Validation so far: 135 receiver tests passed on Linux, including mocked Windows
-input and actual loopback WebSocket connections. One opt-in native Windows test
-was skipped; real Windows cursor input and discovery still need verification.
-Receiver CI is configured for Linux and Windows with Python 3.12 and 3.14. The existing
-Android validation passed 16 JVM tests. All
-Android Kotlin sources, including Compose and device test sources, compiled
-against the Android SDK API. The full Gradle build, Android WebSocket tests,
-lint, and live phone control still need verification outside the restricted
-development environment.
+Validation: 164 receiver tests passed on Linux, including real loopback
+WebSocket text/shortcut input, remembered-device signature verification, replay
+rejection, expiry, revocation and error recovery. The opt-in native Windows test
+was skipped. All 20 Android JVM tests and 10 tests on the connected phone passed, including
+persistent modifiers, connected/remembered connection UI and Keystore resume.
+Debug APK assembly, device test APK assembly, and lint passed (one existing backup
+configuration warning). Real X11 testing confirmed accented/emoji key events and restored
+keyboard mappings. Android Keystore enrollment and PIN-free reconnection were
+verified against a real dry-run Python receiver on the connected phone. See the
+[security assessment](docs/SECURITY.md) for plaintext transport limitations.
 
 ## Project structure
 

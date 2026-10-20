@@ -45,7 +45,7 @@ def test_commands(message, command):
     '{"type":"button","button":"left","down":1}',
     '{"type":"click","button":"unknown"}',
     '{"type":"click","button":[]}',
-    '{"type":"pair","version":2,"pin":"' + PIN + '"}',
+    '{"type":"pair","version":4,"pin":"' + PIN + '"}',
     '{"type":[]}',
     " " * 1025,
     "\ud800",
@@ -56,16 +56,16 @@ def test_rejects_invalid_commands(raw):
 
 
 def test_pairing():
-    assert parse_pair(json.dumps({"type": "pair", "version": 2, "pin": PIN})) == PIN
+    assert parse_pair(json.dumps({"type": "pair", "version": 4, "pin": PIN})) == PIN
 
 
 @pytest.mark.parametrize("changes", [
-    {"version": 1}, {"version": True}, {"version": 2.0},
+    {"version": 1}, {"version": True}, {"version": 4.0},
     {"type": "move"}, {"pin": "short"}, {"pin": "１２３４５"},
     {"pin": "123456"}, {"pin": "1234"}, {"pin": 12345},
     {"token": "a" * 43}, {"extra": True},
 ])
 def test_rejects_invalid_pairing(changes):
-    message = {"type": "pair", "version": 2, "pin": PIN} | changes
+    message = {"type": "pair", "version": 4, "pin": PIN} | changes
     with pytest.raises(ProtocolError):
         parse_pair(json.dumps(message))

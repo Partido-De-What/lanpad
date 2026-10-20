@@ -26,10 +26,12 @@ import okio.ByteString
 import org.json.JSONObject
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicLong
 
 enum class Phase { DISCONNECTED, CONNECTING, PAIRING, CONNECTED, RETRYING, ERROR }
 
-data class LinkState(val phase: Phase = Phase.DISCONNECTED, val message: String = "") {
+data class LinkState(val phase: Phase = Phase.DISCONNECTED, val message: String = "", val trustExpiresAt: Long? = null) {
     val ready: Boolean get() = phase == Phase.CONNECTED
     val busy: Boolean get() = phase in setOf(Phase.CONNECTING, Phase.PAIRING, Phase.RETRYING)
 }
@@ -56,8 +58,10 @@ class PadClient(
     private var job: Job? = null
 
     /** Replace the current session; retry only transient failures, never a rejected PIN. */
-    fun connect(endpoint: Endpoint, pin: String) {
-        require(Pairing.validPin(pin)) { "PIN must contain exactly five digits" }
+    fun connect(endpoint: Endpoint, pin: String, identity: DeviceIdentity? = null,
+                receiverId: String? = null, onRemembered: (String, Long) -> Unit = { _, _ -> }) {
+        require(Pairing.validPin(pin) || (identity != null && receiverId != null)) { "PIN must contain exactly five digits" }
+        val remembered = AtomicReference(receiverId)
         val id: Long
         val previous: Job?
         synchronized(lock) {
@@ -75,7 +79,10 @@ class PadClient(
                         delay(1_000L shl (retry - 1))
                     }
                     try {
-                        attempt(id, endpoint, pin)
+                        attempt(id, endpoint, pin, identity, remembered.get()) { receiver, expiry ->
+                            onRemembered(receiver, expiry)
+                            remembered.set(receiver)
+                        }
                         return@launch
                     } catch (error: CancellationException) {
                         throw error
@@ -114,6 +121,9 @@ class PadClient(
 
     /** Reject input until pairing succeeds and bound the queue instead of building lag. */
     fun offer(command: Command) = synchronized(lock) {
+        if (mutableState.value.ready && mutableState.value.message.isNotBlank()) {
+            mutableState.value = mutableState.value.copy(message = "")
+        }
         if (mutableState.value.ready && !input.offer(command)) {
             disconnect("Input fell behind. Connect again to continue.")
         }
@@ -140,9 +150,15 @@ class PadClient(
     }
 
     /** Pair once, then run a paced sender and heartbeats until the connection ends. */
-    private suspend fun attempt(id: Long, endpoint: Endpoint, pin: String) {
+    private suspend fun attempt(id: Long, endpoint: Endpoint, pin: String,
+                                identity: DeviceIdentity?, receiverId: String?,
+                                onRemembered: (String, Long) -> Unit) {
         val paired = CompletableDeferred<Unit>()
         val ended = CompletableDeferred<LinkFailure>()
+        val enrollment = if (receiverId == null) Pairing.message(pin, identity) else
+            Pairing.resume(receiverId, requireNotNull(identity))
+        val trustExpiry = AtomicLong(0)
+        var challenged = false
         val listener = object : WebSocketListener() {
             private fun fail(error: LinkFailure) {
                 paired.completeExceptionally(error)
@@ -156,22 +172,51 @@ class PadClient(
                         return
                     }
                     mutableState.value = LinkState(Phase.PAIRING)
-                    if (!webSocket.send(Pairing.message(pin))) {
+                    if (!webSocket.send(enrollment)) {
                         fail(LinkFailure("The receiver closed before pairing.", true))
                     }
                 }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                val valid = runCatching {
-                    require(text.length <= 1024)
-                    val message = JSONObject(text)
-                    message.length() == 2 &&
-                        message.get("type") == "paired" && message.get("version") == Pairing.VERSION
-                }.getOrDefault(false)
-                if (!valid || !paired.complete(Unit)) {
-                    fail(LinkFailure("The receiver sent an unexpected response.", false))
-                    webSocket.close(1002, "Invalid response")
+                synchronized(lock) {
+                    if (generation != id || socket !== webSocket) return
+                    val valid = runCatching {
+                        require(text.length <= 1024)
+                        val message = JSONObject(text)
+                        when (message.getString("type")) {
+                            "challenge" -> {
+                                require(!paired.isCompleted && !challenged && receiverId != null && identity != null)
+                                require(message.length() == 3 && message.getString("receiver_id") == receiverId)
+                                challenged = true
+                                require(webSocket.send(Pairing.proof(receiverId, message.getString("nonce"), identity)))
+                            }
+                            "paired" -> {
+                                require(!paired.isCompleted && message.getInt("version") == Pairing.VERSION)
+                                if (identity != null) {
+                                    require(message.length() == 4)
+                                    val receiver = message.getString("receiver_id")
+                                    require(Pairing.validId(receiver))
+                                    if (receiverId != null) require(challenged && receiver == receiverId)
+                                    val expiry = message.getLong("expires_at")
+                                    require(expiry > 0)
+                                    trustExpiry.set(expiry)
+                                    onRemembered(receiver, expiry)
+                                } else require(message.length() == 2)
+                                require(paired.complete(Unit))
+                            }
+                            "input_error" -> {
+                                require(paired.isCompleted && message.length() == 2)
+                                val detail = message.getString("message").take(200)
+                                publish(id, mutableState.value.copy(message = detail))
+                            }
+                            else -> error("Unexpected response")
+                        }
+                    }.isSuccess
+                    if (!valid) {
+                        fail(LinkFailure("Pairing or device verification failed. Enter the PIN to pair again.", false))
+                        webSocket.close(1002, "Invalid response")
+                    }
                 }
             }
 
@@ -206,7 +251,7 @@ class PadClient(
             } catch (_: TimeoutCancellationException) {
                 throw LinkFailure("Pairing timed out. Check the receiver and try again.", true)
             }
-            publish(id, LinkState(Phase.CONNECTED))
+            publish(id, LinkState(Phase.CONNECTED, trustExpiresAt = trustExpiry.get().takeIf { it > 0 }))
             coroutineScope {
                 val sender = launch {
                     while (isActive) {
@@ -252,7 +297,8 @@ class PadClient(
     }
 
     private fun closeFailure(code: Int): LinkFailure = when (code) {
-        4001 -> LinkFailure("PIN rejected. Check the five digits shown on your computer.", false)
+        1011 -> LinkFailure("Receiver input failed. Check the receiver terminal for details.", false)
+        4001 -> LinkFailure("PIN rejected or remembered device expired/revoked. Enter the current PIN to pair again.", false)
         4003 -> LinkFailure("Too many PIN attempts. Wait one minute, then try again.", false)
         4009 -> LinkFailure("Another controller is connected. Disconnect it first.", false)
         4002, 4008, 1009 -> LinkFailure("The receiver rejected the input. Reconnect to try again.", false)

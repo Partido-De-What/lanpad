@@ -9,7 +9,8 @@ from collections import deque
 from typing import Protocol
 
 from .mouse import InputAdapter, MouseSession
-from .protocol import VERSION, ProtocolError, parse_command, parse_pair
+from .protocol import VERSION, ProtocolError, Text, _decode, _fields, parse_command, parse_pair
+from .trust import TrustStore, identifier, public_key
 
 log = logging.getLogger(__name__)
 AUTH_TIMEOUT = 5.0
@@ -58,10 +59,11 @@ class RateLimit:
 class Receiver:
     """Authenticate clients and give one connection exclusive control of the mouse."""
 
-    def __init__(self, adapter: InputAdapter, pin: str) -> None:
+    def __init__(self, adapter: InputAdapter, pin: str, trust: TrustStore | None = None) -> None:
         """Create shared mouse state and save this receiver run's five-digit PIN."""
         self.mouse = MouseSession(adapter)
         self.pin = pin
+        self.trust = trust if trust is not None else TrustStore()
         self.failed_pairs: deque[float] = deque()
         self.active: Connection | None = None
         self.pending_pairs = 0
@@ -95,18 +97,31 @@ class Receiver:
         # not authenticated never own the mouse or trigger mouse cleanup.
         try:
             try:
+                enrollment = None
+                remembered = False
+                # The complete challenge exchange shares one authentication deadline.
                 async with asyncio.timeout(AUTH_TIMEOUT):
                     raw = await connection.recv()
-                if raw is None:
-                    return
-                # Pending connections share the failure budget; recheck after the await.
-                if self.pairing_blocked():
-                    await connection.close(4003, "Too many PIN attempts; wait one minute")
-                    return
-                supplied = parse_pair(raw)
-                # Constant-time comparison avoids revealing matching PIN prefixes.
-                if not secrets.compare_digest(supplied, self.pin):
-                    raise ProtocolError("Invalid PIN")
+                    if raw is None:
+                        return
+                    if self.pairing_blocked():
+                        await connection.close(4003, "Too many PIN attempts; wait one minute")
+                        return
+                    request = _decode(raw)
+                    if request.get("type") == "resume":
+                        if type(request.get("version")) is not int or request["version"] != VERSION:
+                            raise ProtocolError("Unsupported protocol version")
+                        remembered = await self.trust.resume(connection, request)
+                    else:
+                        if "device_id" in request or "public_key" in request:
+                            _fields(request, "version", "pin", "device_id", "public_key")
+                            device = identifier(request.pop("device_id"))
+                            encoded = request.pop("public_key")
+                            public_key(encoded)
+                            enrollment = (device, encoded)
+                        supplied = parse_pair(json.dumps(request))
+                        if not secrets.compare_digest(supplied, self.pin):
+                            raise ProtocolError("Invalid PIN")
             except (ProtocolError, TimeoutError):
                 if not self.pairing_blocked():
                     self.failed_pairs.append(time.monotonic())
@@ -126,7 +141,15 @@ class Receiver:
         self.active = connection
         close_code, close_reason = 1000, "Session ended"
         try:
-            await connection.send(json.dumps({"type": "paired", "version": VERSION}))
+            response = {"type": "paired", "version": VERSION}
+            if enrollment is not None:
+                self.trust.enroll(*enrollment)
+                response["receiver_id"] = self.trust.receiver_id
+                response["expires_at"] = int(self.trust.devices[enrollment[0]]["expires"])
+            elif remembered:
+                response["receiver_id"] = self.trust.receiver_id
+                response["expires_at"] = int(self.trust.devices[remembered]["expires"])
+            await connection.send(json.dumps(response))
             log.info("Controller paired")
             rate = RateLimit()
             while not self.stopping:
@@ -142,7 +165,18 @@ class Receiver:
                     close_code, close_reason = 4008, "Message rate exceeded"
                     break
                 # Validation completes before any command can reach the backend.
-                self.mouse.apply(parse_command(raw))
+                command = parse_command(raw)
+                if isinstance(command, Text):
+                    try:
+                        self.mouse.apply(command)
+                    except Exception:
+                        log.exception("Text input failed; controller remains connected")
+                        self.mouse.release_all()
+                        await connection.send(json.dumps({"type": "input_error",
+                            "message": "Text could not be typed. Check the receiver terminal.",
+                        }))
+                else:
+                    self.mouse.apply(command)
         except ProtocolError:
             close_code, close_reason = 4002, "Invalid input message"
         except TimeoutError:
