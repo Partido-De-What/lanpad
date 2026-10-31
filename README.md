@@ -40,6 +40,8 @@ pairing components in `LanPadScreen.kt`.
 - Personal i3 shortcuts for apps, workspaces, windows, layouts, resizing, and media.
 - Automatic computer discovery with mDNS/DNS-SD, with manual address fallback.
 - First-use PIN pairing, remembered phones with Keystore signing keys, and one active controller.
+- Automatic connection to a remembered computer on launch, with a first-time PIN prompt.
+- Connection stays active when switching phone apps, with a notification Stop action.
 - Connection status, bounded reconnect attempts, and an immediate Stop action.
 - Release of held buttons on disconnect, app backgrounding, or receiver shutdown.
 - Minimal Material 3 interface with light/dark themes and a muted teal accent.
@@ -137,13 +139,26 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 
 ### 3. Pair and use the touchpad
 
-Open LanPad and tap **Connect your computer**. Choose your computer if several
-appear, enter its **Pairing PIN**, and tap **Connect**. No IP or port entry is
+Open LanPad. When a new computer is found, a prompt asks whether you want to
+connect; enter its **Pairing PIN** and tap **Connect**. Choose a computer if
+several appear. For a previously paired computer with valid trust, LanPad
+connects automatically on launch when it is discovered. A remembered manual
+address also works without discovery. **Connect your computer** remains
+available for manual setup. No IP or port entry is
 normally needed. Keep any leading zeros in the PIN.
 
 Move one finger to control the pointer, tap to left-click, and use two fingers to
 scroll. Hold **Left** while moving another finger to drag. Adjust **Pointer speed**
 as needed; tap **Stop** to disconnect.
+
+Switching to another phone app keeps the same connection and its heartbeats
+alive. Returning to LanPad resumes control without pairing again. Held mouse
+buttons are released when LanPad goes into the background. A foreground-service
+notification shows the connection and provides **Stop**; allow notifications
+when prompted to see it in the notification drawer. Close LanPad by removing
+it from Recents to end the session, or use Stop. Receiver shutdown ends the
+session and removes the notification. Stop and dismissed pairing prompts do
+not cause automatic reconnect/prompt loops during that launch.
 
 Tap the **keyboard icon** beside the connection status to switch modes. In
 **Type & keys**, compose text and tap **Send text**; **Enter ↵** is a separate
@@ -167,7 +182,8 @@ keys are Linux-only).
 
 The PIN changes each time the receiver starts and is never saved on the phone.
 With **Remember this phone** enabled, first-time pairing registers the phone's
-Keystore public key. Later connections hide the PIN field and offer **Reconnect**; trust survives
+Keystore public key. Later launches auto-connect; connection settings hide the
+PIN field and offer **Reconnect** when needed. Trust survives
 app/receiver restarts and expires after 90 days. Connection settings show the connected computer and
 **Auto-connect valid for N days**, updated from the receiver on each connection.
 The countdown does not extend the original expiry. **Pair again with a PIN**
@@ -223,11 +239,14 @@ With an authorized phone or emulator connected, run the Compose UI tests:
 Validation: 164 receiver tests passed on Linux, including real loopback
 WebSocket text/shortcut input, remembered-device signature verification, replay
 rejection, expiry, revocation and error recovery. The opt-in native Windows test
-was skipped. All 20 Android JVM tests and 10 tests on the connected phone passed, including
-persistent modifiers, connected/remembered connection UI and Keystore resume.
+was skipped. All 26 Android JVM tests and 13 tests on the connected phone passed, including
+startup policy, automatic PIN prompts, persistent background heartbeats, screen
+recreation, notification Stop and receiver-shutdown cleanup. One optional phone
+test needing an external Python receiver fixture was skipped for this update;
+Keystore resume against that fixture was verified previously.
 Debug APK assembly, device test APK assembly, and lint passed (one existing backup
 configuration warning). Real X11 testing confirmed accented/emoji key events and restored
-keyboard mappings. Android Keystore enrollment and PIN-free reconnection were
+keyboard mappings. Android Keystore enrollment and PIN-free reconnection were previously
 verified against a real dry-run Python receiver on the connected phone. See the
 [security assessment](docs/SECURITY.md) for plaintext transport limitations.
 

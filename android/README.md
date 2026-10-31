@@ -90,11 +90,13 @@ Use `--dry-run` first to log input without moving the mouse. The receiver choose
 an active LAN address and advertises its name, address, and port automatically.
 Keep both devices on a network where they can reach each other.
 
-In LanPad, tap **Connect your computer**. The app searches for compatible receivers
-using Android's [Network Service Discovery](https://developer.android.com/develop/connectivity/wifi/use-nsd).
-It selects the sole receiver automatically or remembers your previous choice.
-If several appear, choose your computer. Enter its five-digit **Pairing PIN** and
-tap **Connect**. Input is enabled only after pairing succeeds. Leading zeros count.
+LanPad searches for compatible receivers using Android's
+[Network Service Discovery](https://developer.android.com/develop/connectivity/wifi/use-nsd).
+It automatically connects to the remembered computer when trust is still valid.
+Otherwise a found-device prompt opens the PIN form. If several new computers
+appear, choose one. Enter its five-digit **Pairing PIN** and tap **Connect**.
+Input is enabled only after pairing succeeds. Leading zeros count. Manual
+setup remains available through **Connect your computer**.
 
 No IP or port entry is needed, including when the receiver uses a custom port.
 **Search again** refreshes discovery. If multicast is blocked, use **Enter address
@@ -114,7 +116,15 @@ Both endpoints must use protocol v4; rebuild and reinstall the app after updatin
 
 Opening settings releases held buttons. Leaving the app disconnects and cancels
 retries; reconnect when you return. Rotation retains the connection but releases
-the previous gesture's buttons. The phone stays awake while paired.
+the previous gesture's buttons. The phone screen stays awake while the controls are visible and paired.
+Switching apps keeps the session alive in a connected-device foreground service.
+The service holds a CPU wake lock for heartbeat delivery, then releases it when
+the session stops. Its persistent notification provides a Stop action. Android
+13+ asks once for notification permission; declining it does not prohibit the
+foreground service, but its notification is then visible through Android's
+active-apps UI rather than the notification drawer. Removing LanPad from Recents,
+finishing its Activity, Stop, or receiver shutdown ends the session. The service
+uses `START_NOT_STICKY` so it does not restart after being closed.
 
 ## Interface
 
@@ -138,7 +148,10 @@ The stable Compose BOM keeps UI library versions compatible.
 
 | Component | Responsibility |
 | --- | --- |
-| `MainActivity` | Hosts Compose and stops control when the app leaves the foreground |
+| `MainActivity` | Hosts Compose, pauses discovery/releases held input in the background, and stops on explicit Activity finish |
+| `LanPadApplication` / `PadSession` | Own the shared socket beyond the Activity lifetime |
+| `ConnectionService` | Connected-device foreground service, heartbeat wake lock, notification Stop, and task-removal cleanup |
+| `StartupConnection` | One startup decision: connect a trusted receiver or prompt to pair a new receiver |
 | `PadViewModel` | Owns screen state, validates settings, scales movement, and starts effects |
 | `SettingsStore` | Stores receiver name, address, port, and sensitivity with DataStore; never stores the PIN |
 | `ReceiverDiscovery` | Browses DNS-SD while visible and resolves receiver addresses and ports |
@@ -155,7 +168,21 @@ OkHttp callbacks, keeping socket waits off the UI thread.
 On Android 14+, discovery watches service updates continuously. Older phones
 resolve services one at a time for compatibility with older NSD implementations.
 Callbacks are serialized on the main thread and tagged by generation so results
-from a stopped search cannot populate a new search. Browsing stops in the background.
+from a stopped search cannot populate a new search. Browsing stops in the background;
+the paired WebSocket remains owned by the application and foreground service.
+
+Startup waits for saved settings and receiver discovery, then connects the
+previously selected trusted computer once. Saved manual endpoints can connect
+without discovery. A new or expired receiver opens the PIN sheet automatically;
+several new receivers require choosing one. Dismissal, Stop and explicit PIN
+entry suppress repeated automatic actions during that launch. Discovery updates
+are allowed a short settling interval, and a different computer cannot displace
+the remembered preferred receiver. Existing background sessions are reused.
+
+The service declares the connected-device type and its permissions following
+[Android foreground service requirements](https://developer.android.com/develop/background-work/services/fgs/service-types#connected-device).
+Android may still terminate the app after a force-stop or under device-specific
+power management; such termination cannot preserve an in-process socket.
 
 The sender transmits at most two input messages every 17 ms (under 120/s), plus
 a heartbeat each second. A 64-event queue and 8 KiB socket backlog limit prevent
@@ -177,7 +204,12 @@ JVM tests cover endpoints, discovered receiver selection, PINs, gesture
 transitions, bounded queues, wire encoding,
 pairing before input, heartbeats, and disconnect release with a MockWebServer
 WebSocket. Compose tests cover setup, disabled controls, accessible clicks, and
-Stop, and automatic receiver selection. Instrumented tests require a phone or
+Stop, first-discovery PIN prompting, and automatic receiver selection. Startup
+policy tests cover first pairing, remembered devices, delayed discovery, existing
+sessions and explicit Stop. Service integration tests on a phone-local fake
+receiver cover background heartbeats past the receiver timeout, Activity
+recreation, notification Stop, explicit close, and receiver shutdown.
+Instrumented tests require a phone or
 emulator.
 
 On the phone, verify movement, clicks, both scroll axes, hold-and-drag, rotation

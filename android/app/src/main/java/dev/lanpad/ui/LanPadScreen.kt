@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
@@ -81,6 +82,7 @@ data class PadActions(
     val saveSensitivity: () -> Unit = {},
     val rememberDevice: (Boolean) -> Unit = {},
     val forgetDevices: () -> Unit = {},
+    val dismissConnectionPrompt: () -> Unit = {},
 )
 
 /** The main surface stays focused on control; connection details live in a sheet. */
@@ -90,6 +92,15 @@ fun LanPadScreen(state: PadState, actions: PadActions) {
     var keyboardMode by rememberSaveable { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     val release by rememberUpdatedState(actions.releaseAll)
+    LaunchedEffect(state.promptConnection) {
+        if (state.promptConnection) {
+            showConnection = true
+            actions.dismissConnectionPrompt()
+        }
+    }
+    LaunchedEffect(state.link.ready) {
+        if (state.link.ready) showConnection = false
+    }
     val enabled = state.link.ready && !showConnection
     DisposableEffect(enabled) {
         // Rotation, opening settings, and removing the screen all end held input.
@@ -278,8 +289,8 @@ private fun ConnectionSheet(state: PadState, actions: PadActions, onDismiss: () 
                 FilledTonalButton(onClick = actions.disconnect, modifier = Modifier.fillMaxWidth()) { Text("Cancel connection") }
             } else {
             Column {
-                Text("A connection away.", style = MaterialTheme.typography.headlineLarge)
-                Text(if (state.canResume) "Choose your remembered computer to reconnect." else "Choose your computer and enter its five-digit PIN.", Modifier.padding(top = 8.dp),
+                Text(if (state.selectedReceiver != null) "Found ${state.selectedReceiver?.name}" else "Connect your computer", style = MaterialTheme.typography.headlineLarge)
+                Text(if (state.canResume) "Choose your remembered computer to reconnect." else "Would you like to connect? Enter the five-digit PIN shown on your computer.", Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (!state.manualAddress) ReceiverChoices(state, actions)

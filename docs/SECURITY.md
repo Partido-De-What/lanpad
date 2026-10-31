@@ -65,7 +65,12 @@ removes its Keystore identity. A new install must pair again.
 
 Key chords always release their modifiers, including error cleanup. Modifier
 chips persist as local UI selections and do not leave remote keys held between
-commands. Disconnecting clears their selections. X11 text entry uses the active
+commands. Disconnecting clears their selections. Backgrounding releases held
+mouse input while the existing authenticated session continues in a visible
+foreground service. Startup connection uses only unexpired device trust;
+first-time or expired trust still requires entering the PIN. Stop does not
+silently reconnect during the same launch. Notification Stop and removing the
+app task end the session. X11 text entry uses the active
 keyboard map and temporarily assigns unused keycodes for Unicode, restoring
 those mappings and modifier state afterward. Unicode support still depends on
 the target X11 application. Text injection failures produce an `input_error`

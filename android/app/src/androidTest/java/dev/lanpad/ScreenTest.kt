@@ -148,4 +148,22 @@ class ScreenTest {
         compose.onNodeWithText("Pairing PIN").assertDoesNotExist()
         compose.onNodeWithText("Disconnect").assertIsEnabled()
     }
+
+    @Test fun discoveredReceiverAutomaticallyPromptsForPinWithoutConnecting() {
+        var prompted = 0
+        var connections = 0
+        compose.setContent {
+            LanPadTheme {
+                LanPadScreen(PadState(settingsReady = true, promptConnection = true,
+                    discovery = DiscoveryState(receivers = listOf(
+                        DiscoveredReceiver("Test workstation", Endpoint("192.168.1.2", 8765))))),
+                    PadActions(dismissConnectionPrompt = { prompted++ }, connect = { connections++; true }))
+            }
+        }
+        compose.onNodeWithText("Found Test workstation").assertIsDisplayed()
+        compose.onNodeWithText("Pairing PIN").assertIsDisplayed()
+        compose.onNodeWithText("Connect").assertIsNotEnabled()
+        assertEquals(1, prompted)
+        assertEquals(0, connections)
+    }
 }

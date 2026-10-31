@@ -55,4 +55,5 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

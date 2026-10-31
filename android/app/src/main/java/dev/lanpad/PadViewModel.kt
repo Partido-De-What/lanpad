@@ -10,13 +10,16 @@ import dev.lanpad.input.Command
 import dev.lanpad.network.DiscoveryState
 import dev.lanpad.network.Endpoint
 import dev.lanpad.network.LinkState
-import dev.lanpad.network.PadClient
 import dev.lanpad.network.Pairing
+import dev.lanpad.network.Phase
+import dev.lanpad.network.StartupConnection
 import dev.lanpad.network.ReceiverDiscovery
 import dev.lanpad.network.chooseReceiver
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -34,6 +37,7 @@ data class PadState(
     val rememberDevice: Boolean = true,
     val canResume: Boolean = false,
     val trustExpiresAt: Long = 0,
+    val promptConnection: Boolean = false,
 ) {
     val trustDaysRemaining get() = dev.lanpad.data.trustDaysRemaining(link.trustExpiresAt ?: trustExpiresAt)
     val selectedReceiver get() = if (manualAddress) null
@@ -44,7 +48,11 @@ data class PadState(
 class PadViewModel(application: Application) : AndroidViewModel(application) {
     private val settings = SettingsStore(application)
     private val trust = DeviceTrust(application)
-    private val client = PadClient(viewModelScope)
+    private val session = (application as LanPadApplication).session
+    private val client = session.client
+    private val startup = StartupConnection()
+    private val initialStopRequest = session.stopRequests.value
+    private val visible = MutableStateFlow(false)
     private val discovery = ReceiverDiscovery(application)
     private val form = MutableStateFlow(PadState())
     private val mutableState = MutableStateFlow(PadState())
@@ -53,7 +61,8 @@ class PadViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             val saved = settings.values.first()
-            form.update { it.copy(settings = saved, settingsReady = true) }
+            form.update { it.copy(settings = saved, settingsReady = true,
+                manualAddress = saved.receiverName.isBlank() && saved.host.isNotBlank()) }
         }
         viewModelScope.launch {
             combine(form, client.state, discovery.state) { fields, link, found ->
@@ -69,21 +78,54 @@ class PadViewModel(application: Application) : AndroidViewModel(application) {
             }
                 .collect { mutableState.value = it }
         }
+        viewModelScope.launch {
+            combine(state, visible, session.stopRequests) { current, foreground, stops ->
+                if (stops != initialStopRequest) startup.handled()
+                current to foreground
+            }.collectLatest { (current, foreground) ->
+                if (foreground && current.link.phase in setOf(Phase.DISCONNECTED, Phase.ERROR)) delay(600)
+                val manualEndpoint = if (current.manualAddress) runCatching {
+                    Endpoint.parse(current.settings.host, current.settings.port)
+                }.getOrNull() else null
+                val preferredFound = current.settings.receiverName.isBlank() ||
+                    current.selectedReceiver?.name == current.settings.receiverName
+                val available = manualEndpoint != null || (preferredFound && current.discovery.receivers.isNotEmpty())
+                when (startup.decide(foreground, current.settingsReady, current.link.phase,
+                    available, current.canResume && current.rememberDevice)) {
+                    StartupConnection.Action.CONNECT -> connect()
+                    StartupConnection.Action.PROMPT -> form.update { it.copy(promptConnection = true) }
+                    StartupConnection.Action.NONE -> Unit
+                }
+            }
+        }
     }
 
     fun editHost(host: String) = edit { copy(settings = settings.copy(host = host)) }
     fun editPort(port: String) = edit { copy(settings = settings.copy(port = port)) }
-    fun editPin(value: String) = edit { copy(pin = value.filter { it in '0'..'9' }.take(5)) }
+    fun editPin(value: String) {
+        startup.handled() // Typing a PIN means the user is pairing explicitly.
+        edit { copy(pin = value.filter { it in '0'..'9' }.take(5)) }
+    }
     fun selectReceiver(name: String) = edit { copy(selectedName = name, manualAddress = false) }
     fun manualAddress(value: Boolean) = edit { copy(manualAddress = value) }
     fun rememberDevice(value: Boolean) = edit { copy(rememberDevice = value) }
     fun forgetDevices() {
-        client.disconnect()
+        startup.handled()
+        session.stop()
         trust.forgetAll()
         edit { copy(pin = "", rememberDevice = false) }
     }
-    fun startDiscovery() = discovery.start()
-    fun stopDiscovery() = discovery.stop()
+    fun startDiscovery() {
+        visible.value = true
+        discovery.start()
+    }
+    fun stopDiscovery() {
+        visible.value = false
+        discovery.stop()
+        client.releaseAll()
+    }
+    fun dismissConnectionPrompt() = form.update { it.copy(promptConnection = false) }
+    fun close() { startup.handled(); session.stop("LanPad closed.") }
     fun refreshDiscovery() { discovery.stop(); discovery.start() }
 
     private fun edit(change: PadState.() -> PadState) {
@@ -92,6 +134,7 @@ class PadViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Use the discovered endpoint or manual form, remember the choice, and start pairing on IO. */
     fun connect(): Boolean {
+        startup.handled()
         val current = form.value.copy(discovery = discovery.state.value)
         val endpoint = try {
             require(current.settingsReady) { "Settings are still loading. Try again in a moment." }
@@ -113,14 +156,25 @@ class PadViewModel(application: Application) : AndroidViewModel(application) {
             receiverName = if (current.manualAddress) "" else current.selectedReceiver?.name.orEmpty())
         form.update { it.copy(settings = saved, formError = null) }
         persist(saved)
-        client.connect(endpoint, current.pin, if (current.rememberDevice) trust else null, remembered) { receiver, expiry ->
-            trust.remember(name, endpoint, receiver, expiry)
-            form.update { it.copy(pin = "") }
+        try {
+            session.connect { connection ->
+                connection.connect(endpoint, current.pin, if (current.rememberDevice) trust else null, remembered) { receiver, expiry ->
+                    trust.remember(name, endpoint, receiver, expiry)
+                    form.update { it.copy(pin = "") }
+                }
+            }
+        } catch (_: RuntimeException) {
+            form.update { it.copy(formError = "Couldn't start the connection service. Keep LanPad open and try again.") }
+            return false
         }
+        form.update { it.copy(promptConnection = false) }
         return true
     }
 
-    fun disconnect(message: String = "") = client.disconnect(message)
+    fun disconnect(message: String = "") {
+        startup.handled()
+        session.stop(message)
+    }
     fun releaseAll() = client.releaseAll()
 
     /** Route typed UI gestures through sensitivity handling before enqueueing them. */
@@ -170,7 +224,6 @@ class PadViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         discovery.stop()
-        client.close()
         super.onCleared()
     }
 }
