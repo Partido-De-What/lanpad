@@ -85,7 +85,7 @@ class ConnectionService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL)
             else @Suppress("DEPRECATION") Notification.Builder(this)
-        return builder.setSmallIcon(R.drawable.ic_launcher).setContentTitle("LanPad")
+        return builder.setSmallIcon(R.drawable.ic_notification).setContentTitle("LanPad")
             .setContentText(if (state.ready) "Connected · available while you use other apps" else "Connecting to your computer…")
             .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
             .addAction(Notification.Action.Builder(null, "Stop", stop).build()).build()
